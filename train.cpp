@@ -9,6 +9,8 @@
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 #define INF HUGE_VAL
 
+
+
 void print_null(const char *s) {}
 
 void exit_with_help()
@@ -111,6 +113,21 @@ int main(int argc, char **argv)
 	read_problem(input_file_name);
 	error_msg = check_parameter(&prob,&param);
 
+    
+    // create gpu handles
+    if (cublasCreate(&handle) != CUBLAS_STATUS_SUCCESS) {
+        std::cerr  << "CUBLAS initialization failed!\n";
+        cudaDeviceReset();
+        exit(EXIT_FAILURE);
+    }
+    
+    if (cusparseCreate(&sparsehandle) != CUSPARSE_STATUS_SUCCESS) {
+        std::cerr  << "CUSPARSE initialization failed!\n";
+        cudaDeviceReset();
+        exit(EXIT_FAILURE);
+    }
+    
+    
 	if(error_msg)
 	{
 		fprintf(stderr,"ERROR: %s\n",error_msg);

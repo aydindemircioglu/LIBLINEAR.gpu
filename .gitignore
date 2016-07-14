@@ -1,0 +1,7 @@
+**/CMakeCache.txt
+**/CMakeFiles/**
+*.a
+*.o
+train
+**/camke_install.cmake
+**/cmake_install.cmake

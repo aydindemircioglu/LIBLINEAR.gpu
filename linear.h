@@ -1,10 +1,30 @@
 #ifndef _LIBLINEAR_H
 #define _LIBLINEAR_H
 
+
+// gpu
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
+#include <cusparse_v2.h>
+#include <helper_cuda.h>
+#include <thrust/copy.h>
+#include <thrust/fill.h>
+#include <thrust/sequence.h>
+
+
+
+extern cublasHandle_t handle;
+extern cusparseHandle_t sparsehandle;
+
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+    
+
+    
 struct feature_node
 {
 	int index;

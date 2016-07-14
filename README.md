@@ -30,7 +30,9 @@ Simply execute
 ## Notes
 
 - The GPU code might be still unoptimized, however it seems that the code
-is as fast as my 2x octa xeon e5-2670.
+is as fast as my 2x octa xeon e5-2670. As the GPU utiliziation (reported by nvidia-smi)
+seems to be very low (roughly 20%) it might be the serial code that keeps the 
+GPU from flying.
 
 - Hyperthreading seems to hurt the multicore version of Liblinear.  This should
 not hurt the GPU port though.
@@ -48,7 +50,7 @@ not hurt the GPU port though.
 
 This software is built upon the great liblinear-multicore library, which can be found here:
 
-- [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/multicore-liblinear/]]
+- https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/multicore-liblinear/
 
 and uses CUDA in form of cuSPARSE (https://developer.nvidia.com/cusparse) 
 and cuBLAS (https://developer.nvidia.com/cublas).
