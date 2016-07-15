@@ -5,7 +5,10 @@
 #include <ctype.h>
 #include <errno.h>
 #include "linear.h"
+#include <helper_cuda.h>
+#include "gpuHelpers.h"
 #include <omp.h>
+
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 #define INF HUGE_VAL
 
@@ -54,7 +57,8 @@ void exit_with_help()
 	"-v n: n-fold cross validation mode\n"
 	"-C : find parameter C (only for -s 0 and 2)\n"
 	"-n nr_thread : parallel version with [nr_thread] threads (default 1; only for -s 0, 1, 2, 3, 11)\n"
-	"-q : quiet mode (no outputs)\n"
+    "-u gpuid: set the id of the gpu device (default detect automatically)\n"
+    "-q : quiet mode (no outputs)\n"
 	);
 	exit(1);
 }
@@ -102,6 +106,8 @@ int flag_C_specified;
 int flag_solver_specified;
 int nr_fold;
 double bias;
+int  gpu;
+int verbose;
 
 int main(int argc, char **argv)
 {
@@ -109,10 +115,44 @@ int main(int argc, char **argv)
 	char model_file_name[1024];
 	const char *error_msg;
 
+    gpu = -1;
 	parse_command_line(argc, argv, input_file_name, model_file_name);
-	read_problem(input_file_name);
-	error_msg = check_parameter(&prob,&param);
-
+    
+    
+    // now find GPU-- mimic cuda sample helper function 
+    if (gpu == -1) {
+        // pick the device with highest Gflops/s
+        if (verbose) std::cout  << "Autodetecting GPU Device..\n";
+        gpu = getMaxGflopsDeviceId();
+        cudaDeviceProp deviceProp;
+        checkCudaErrors(cudaSetDevice(gpu));
+        checkCudaErrors(cudaGetDeviceProperties(&deviceProp, gpu ));
+        if (verbose) std::cout << "    GPU Device " << gpu  << ": " << deviceProp.name << " with compute capability " << deviceProp.major << "." << deviceProp.minor << "\n";
+    } else if (gpu < 0) {
+        std::cerr << "Unable to initialize GPU with device ID " << gpu << "\n";
+        exit(EXIT_FAILURE);
+    }
+    
+    int devID = gpuDeviceInit(gpu);
+    if (devID < 0) {
+        std::cerr  << "Unable to initialize GPU with device ID " << gpu << " (Error: " << devID << ")\n";
+        exit(EXIT_FAILURE);
+    } 
+    
+    cudaDeviceProp deviceProp;
+    checkCudaErrors(cudaSetDevice(gpu));
+    checkCudaErrors(cudaGetDeviceProperties(&deviceProp, gpu));
+    unsigned long long gflops = getGFlopsOfDeviceId (gpu)/1000000;
+    if (verbose) std::cout << "GPU Device " << gpu << ": " << deviceProp.name << " with compute capability " << deviceProp.major << deviceProp.minor << " and " << (double) gflops/1000.0 << " GFlops\n";
+    
+    int driverVersion;
+    cudaDriverGetVersion(&driverVersion);
+    if (verbose) std::cout << "CUDA Driver version: " << driverVersion << "\n";
+    
+    
+    
+    if (verbose) std::cout << "Initializing GPU libraries.\n";
+    
     
     // create gpu handles
     if (cublasCreate(&handle) != CUBLAS_STATUS_SUCCESS) {
@@ -128,12 +168,39 @@ int main(int argc, char **argv)
     }
     
     
+    // read problem
+    if (verbose) std::cout << "Reading data.\n";
+    read_problem(input_file_name);
+    error_msg = check_parameter(&prob,&param);
+    
 	if(error_msg)
 	{
 		fprintf(stderr,"ERROR: %s\n",error_msg);
 		exit(1);
 	}
 
+	
+	// convert problem to dense, colmajor gpu data
+	if (verbose) std::cout << "Pushing data to GPU.\n";
+    double *tmpData = (double*) std::calloc(prob.l*prob.n, sizeof(double));
+    
+    for(int i=0;i<prob.l;i++) {
+        feature_node *xi = prob.x[i];
+        while(xi->index != -1) {
+            tmpData [(xi->index-1)*prob.l + i] = xi->value;
+            xi++;
+        }
+    }
+    
+    // push data to gpu
+    thrust::device_vector<double> gpuData = thrust::device_vector<double> (tmpData, tmpData + prob.l*prob.n);
+    prob.rawgpuData = thrust::raw_pointer_cast(&gpuData[0]);
+    
+    // delete temporary data
+    delete[] tmpData;
+    
+    
+	
 	if (flag_find_C)
 	{
 		do_find_parameter_C();
@@ -144,7 +211,7 @@ int main(int argc, char **argv)
 	}
 	else
 	{
-		model_=train(&prob, &param);
+		model_ = train(&prob, &param);
 		if(save_model(model_file_name, model_))
 		{
 			fprintf(stderr,"can't save model to file %s\n",model_file_name);
@@ -236,7 +303,11 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 	flag_find_C = 0;
 	flag_omp = 0;
 	bias = -1;
-
+    gpu = -1;
+    verbose = true;
+    param.minsize = 16384;
+    param.maxsize = 32768;
+    
 	// parse options
 	for(i=1;i<argc;i++)
 	{
@@ -245,7 +316,7 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 			exit_with_help();
 		switch(argv[i-1][1])
 		{
-			case 's':
+            case 's':
 				param.solver_type = atoi(argv[i]);
 				flag_solver_specified = 1;
 				break;
@@ -267,6 +338,19 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 				bias = atof(argv[i]);
 				break;
 
+            // gpu
+            case 'u':
+                gpu = atoi(argv[i]);
+                break;
+                // gpu
+            case 'i':
+                param.initsize = atoi(argv[i]);
+                break;
+                // gpu
+            case 'm':
+                param.maxsize = atoi(argv[i]);
+                break;
+                
 			case 'n':
 				flag_omp = 1;
 				param.nr_thread = atoi(argv[i]);
@@ -292,6 +376,7 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 
 			case 'q':
 				print_func = &print_null;
+                verbose = false;
 				i--;
 				break;
 

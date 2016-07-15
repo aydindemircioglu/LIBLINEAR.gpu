@@ -7,7 +7,7 @@
 #include "linear.h"
 #include "tron.h"
 #include <omp.h>
- 
+#include "gpuHelpers.h"
 
 // global handles
 cublasHandle_t handle = 0;
@@ -918,8 +918,11 @@ static void solve_l2r_l1l2_svc(
 	// workingset: a subset of candidates for sequential CD updates
 	double eps1 = 0.1;
 	double min_eps1 = min(0.01*eps, eps1);
-	int init_candidates_size = 256;
-	int max_candidates_size = 4096;
+    int init_candidates_size = prob->initsize;
+	int max_candidates_size = prob->maxsize;
+    
+    std::cout << "INIT: " << init_candidates_size  << "\n";
+    std::cout << "MAX: " <<  max_candidates_size  << "\n";
 	int candidates_size = min(init_candidates_size, max_candidates_size);
 	double *Grad = new double[max_candidates_size];
 	int *workingset = new int[max_candidates_size];
@@ -934,6 +937,36 @@ static void solve_l2r_l1l2_svc(
 		upper_bound[0] = Cn;
 		upper_bound[2] = Cp;
 	}
+	
+	
+	// general gpu init
+	int n = prob->n;
+    int m = prob->l;
+    
+    cusparseMatDescr_t descr = 0;
+    cusparseCreateMatDescr(&descr);
+    
+    cusparseSetMatType (descr, CUSPARSE_MATRIX_TYPE_GENERAL);
+    cusparseSetMatIndexBase (descr, CUSPARSE_INDEX_BASE_ZERO);  
+    
+    thrust::device_vector<double> activeData (max_candidates_size * n);
+    double *outp = thrust::raw_pointer_cast(&activeData[0]);
+    double *inp = prob->rawgpuData;
+    
+    thrust::device_vector<double> csrValA(max_candidates_size);
+    thrust::fill (csrValA.begin(), csrValA.end(), 1);
+    double*rawcsrValA = thrust::raw_pointer_cast(&csrValA[0]);
+    
+    thrust::device_vector<int> csrRowPtrA (max_candidates_size+1);
+    thrust::sequence (csrRowPtrA.begin(), csrRowPtrA.end());
+    int*rawcsrRowPtrA = thrust::raw_pointer_cast(&csrRowPtrA [0]);
+    
+    thrust::device_vector< double> dGrad(max_candidates_size);
+    double *rawGrad = thrust::raw_pointer_cast(&dGrad[0]);
+    
+    double *newGrad = new double[max_candidates_size];
+        
+    
 
 	for(i=0; i<l; i++)
 	{
@@ -946,7 +979,7 @@ static void solve_l2r_l1l2_svc(
 			y[i] = -1;
 		}
 	}
-
+    
 	// Initial alpha can be set here. Note that
 	// 0 <= alpha[i] <= upper_bound[GETI(i)]
 	for(i=0; i<l; i++)
@@ -981,13 +1014,45 @@ static void solve_l2r_l1l2_svc(
 		{
 			int send = min(candidates_size, active_size-t);
 
-#pragma omp parallel for private(s,i) schedule(static)
-			for (s=0; s<send; s++)
-			{
-				i = index[t+s];
-				Grad[s] = y[i]*sparse_operator::dot(w, prob->x[i])-1 + alpha[i]*diag[GETI(i)];
-			}
-
+            // # start of gpu variant
+            {                
+                // columns are the indices we are given
+                thrust::device_vector<int> csrColIndA(index + t, index + t + send);
+                int*rawcsrColIndA = thrust::raw_pointer_cast(&csrColIndA[0]);
+                
+                double cAlpha = 1.0;
+                double cBeta = 0.0;
+                checkCusparse(cusparseDcsrmm( sparsehandle, CUSPARSE_OPERATION_NON_TRANSPOSE, send, n, m, 
+                                               send, // nnz
+                                               &cAlpha, descr, 
+                                               rawcsrValA, rawcsrRowPtrA, rawcsrColIndA,
+                                               inp, m, 
+                                               &cBeta, outp, send));
+                
+                // move w vector to gpu (or used some pinned memory or something better?)
+                thrust::device_vector< double> dw(w, w+n);
+                double *rawW = thrust::raw_pointer_cast(&dw[0]);
+                
+                // now do matrix-vector multiplication
+                cAlpha = 1.0;
+                cBeta = 0.0;
+                checkCublas(cublasDgemv(handle, CUBLAS_OP_N, 
+                                         send, n, &cAlpha, 
+                                         outp, send, // column-major 
+                                         rawW, 1, 
+                                         &cBeta, rawGrad, 1));
+                
+                // copy grad down again
+                thrust::copy(dGrad.begin(), dGrad.end(), newGrad);
+                
+                // now add the rest
+                for (s=0; s<send; s++) {
+                    i = index[t+s];
+                    Grad[s] = y[i]*newGrad[s] - 1 + alpha[i]*diag[y[i] + 1];
+                }
+            }
+            
+            
 			int workingset_size = 0;
 
 			for (s=0; s<send; s++)
@@ -2450,7 +2515,7 @@ model* train(const problem *prob, const parameter *param)
 		model_->nr_feature=n;
 	model_->param = *param;
 	model_->bias = prob->bias;
-
+    
 	omp_set_num_threads(param->nr_thread);
 
 	if(check_regression_model(model_))
@@ -2537,7 +2602,12 @@ model* train(const problem *prob, const parameter *param)
 				else
 					for(i=0;i<w_size;i++)
 						model_->w[i] = 0;
-
+                
+                // also copy pointer to gpu raw data
+                sub_prob.rawgpuData = prob->rawgpuData;
+                sub_prob.maxsize = param->maxsize;
+                sub_prob.initsize = param->initsize;
+                    
 				train_one(&sub_prob, param, model_->w, weighted_C[0], weighted_C[1]);
 			}
 			else

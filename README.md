@@ -5,15 +5,23 @@ This is a port of LIBLINEAR.multicore to CUDA/GPU. Only linux is supported for t
 Also, only dual l1/l2 classification is ported to the GPU.
 
 
+## BEWARE
+
+On the GPU we use dense, not sparse data. This can be a very bad bottleneck,
+if the data is rather sparse. It is not uncommon for the GPU solver to be slower
+than the CPU version in this case! Please make sure to use this solver only for
+dense data.
+
+
 
 ## Compiling
 
 Make sure you have all prerequisites, notably CUDA and openMP.
-The path of  CUDA
-
-Switch to the code directory and just issue:
+LIBLINEAR.gpu uses CMake instead of simple Make.
+To compile, switch to the code directory and just issue:
 
 ```
+$ cmake .
 $ make  all
 ```
 
@@ -24,8 +32,11 @@ This should produce a train binary under the current directory.
 
 Simply execute
 
-..
 
+```
+$ ./train  heart_scale -s 1 -c 1  ./model
+
+```
 
 ## Notes
 
@@ -34,10 +45,20 @@ is as fast as my 2x octa xeon e5-2670. As the GPU utiliziation (reported by nvid
 seems to be very low (roughly 20%) it might be the serial code that keeps the 
 GPU from flying.
 
+- Because of slight differences in floating point precision, the results of the GPU and CPU
+versions are not necessarily exactly the same.  Also, the randomization is different,
+so one cannot expect the very same results.
+
 - Hyperthreading seems to hurt the multicore version of Liblinear.  This should
 not hurt the GPU port though.
 
 - For now prediction is not touched at all, though it probably can be speed up too.
+
+- As small candidate sizes does not help gpu parallelization, we fixed this to be
+32768. there seems to be little gain to start with a small size and increase it in our
+experiments.
+
+
 
 
 ## Restrictions

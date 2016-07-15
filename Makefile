@@ -180,60 +180,6 @@ blas/fast:
 	$(MAKE) -f blas/CMakeFiles/blas.dir/build.make blas/CMakeFiles/blas.dir/build
 .PHONY : blas/fast
 
-linear.o: linear.cpp.o
-
-.PHONY : linear.o
-
-# target to build an object file
-linear.cpp.o:
-	$(MAKE) -f CMakeFiles/train.dir/build.make CMakeFiles/train.dir/linear.cpp.o
-.PHONY : linear.cpp.o
-
-linear.i: linear.cpp.i
-
-.PHONY : linear.i
-
-# target to preprocess a source file
-linear.cpp.i:
-	$(MAKE) -f CMakeFiles/train.dir/build.make CMakeFiles/train.dir/linear.cpp.i
-.PHONY : linear.cpp.i
-
-linear.s: linear.cpp.s
-
-.PHONY : linear.s
-
-# target to generate assembly for a file
-linear.cpp.s:
-	$(MAKE) -f CMakeFiles/train.dir/build.make CMakeFiles/train.dir/linear.cpp.s
-.PHONY : linear.cpp.s
-
-train.o: train.cpp.o
-
-.PHONY : train.o
-
-# target to build an object file
-train.cpp.o:
-	$(MAKE) -f CMakeFiles/train.dir/build.make CMakeFiles/train.dir/train.cpp.o
-.PHONY : train.cpp.o
-
-train.i: train.cpp.i
-
-.PHONY : train.i
-
-# target to preprocess a source file
-train.cpp.i:
-	$(MAKE) -f CMakeFiles/train.dir/build.make CMakeFiles/train.dir/train.cpp.i
-.PHONY : train.cpp.i
-
-train.s: train.cpp.s
-
-.PHONY : train.s
-
-# target to generate assembly for a file
-train.cpp.s:
-	$(MAKE) -f CMakeFiles/train.dir/build.make CMakeFiles/train.dir/train.cpp.s
-.PHONY : train.cpp.s
-
 tron.o: tron.cpp.o
 
 .PHONY : tron.o
@@ -275,12 +221,6 @@ help:
 	@echo "... install/strip"
 	@echo "... edit_cache"
 	@echo "... blas"
-	@echo "... linear.o"
-	@echo "... linear.i"
-	@echo "... linear.s"
-	@echo "... train.o"
-	@echo "... train.i"
-	@echo "... train.s"
 	@echo "... tron.o"
 	@echo "... tron.i"
 	@echo "... tron.s"

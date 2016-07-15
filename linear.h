@@ -6,7 +6,9 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 #include <cusparse_v2.h>
-#include <helper_cuda.h>
+
+#include <thrust/host_vector.h> 
+#include <thrust/device_vector.h> 
 #include <thrust/copy.h>
 #include <thrust/fill.h>
 #include <thrust/sequence.h>
@@ -37,6 +39,9 @@ struct problem
 	double *y;
 	struct feature_node **x;
 	double bias;            /* < 0 if no bias term */  
+	double *rawgpuData;
+    int initsize;
+    int maxsize;
 };
 
 enum { L2R_LR, L2R_L2LOSS_SVC_DUAL, L2R_L2LOSS_SVC, L2R_L1LOSS_SVC_DUAL, MCSVM_CS, L1R_L2LOSS_SVC, L1R_LR, L2R_LR_DUAL, L2R_L2LOSS_SVR = 11, L2R_L2LOSS_SVR_DUAL, L2R_L1LOSS_SVR_DUAL }; /* solver_type */
@@ -54,6 +59,8 @@ struct parameter
 	double* weight;
 	double p;
 	double *init_sol;
+    int initsize;
+    int maxsize;
 };
 
 struct model
