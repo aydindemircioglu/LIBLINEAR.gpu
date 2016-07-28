@@ -58,6 +58,8 @@ void exit_with_help()
 	"-C : find parameter C (only for -s 0 and 2)\n"
 	"-n nr_thread : parallel version with [nr_thread] threads (default 1; only for -s 0, 1, 2, 3, 11)\n"
     "-u gpuid: set the id of the gpu device (default detect automatically)\n"
+    "-i initsize : size of initial set of candidates (default 16384)\n"
+    "-m maxsize : maximal size of set of candidates (default 32768)\n"
     "-q : quiet mode (no outputs)\n"
 	);
 	exit(1);
@@ -305,7 +307,7 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 	bias = -1;
     gpu = -1;
     verbose = true;
-    param.minsize = 16384;
+    param.initsize = 16384;
     param.maxsize = 32768;
     
 	// parse options
